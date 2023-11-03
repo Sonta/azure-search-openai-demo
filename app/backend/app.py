@@ -16,7 +16,7 @@ from azure.core.exceptions import ResourceNotFoundError
 from azure.identity.aio import DefaultAzureCredential
 from azure.monitor.opentelemetry import configure_azure_monitor
 from azure.search.documents.aio import SearchClient
-from azure.storage.blob.aio import BlobServiceClient
+from azure.storage.blob import BlobServiceClient
 from core.authentication import AuthenticationHelper
 from dotenv import load_dotenv
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
@@ -87,7 +87,7 @@ async def content_file(path: str):
     logging.info("Opening file %s at page %s", path)
     blob_container_client = current_app.config[CONFIG_BLOB_CONTAINER_CLIENT]
     try:
-        blob = await blob_container_client.get_blob_client(path).download_blob()
+        blob = blob_container_client.get_blob_client(path).download_blob()
     except ResourceNotFoundError:
         logging.exception("Path not found: %s", path)
         abort(404)
@@ -97,7 +97,7 @@ async def content_file(path: str):
     if mime_type == "application/octet-stream":
         mime_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
     blob_file = io.BytesIO()
-    await blob.readinto(blob_file)
+    blob.readinto(blob_file)
     blob_file.seek(0)
     return await send_file(
         blob_file, mimetype=mime_type, as_attachment=False, attachment_filename=path
@@ -197,6 +197,7 @@ async def setup_clients():
     # Replace these with your own values, either in environment variables or directly here
     AZURE_STORAGE_ACCOUNT = os.environ["AZURE_STORAGE_ACCOUNT"]
     AZURE_STORAGE_CONTAINER = os.environ["AZURE_STORAGE_CONTAINER"]
+    AZURE_STORAGE_KEY = os.getenv("BLOB_STORAGE_KEY")
     AZURE_SEARCH_SERVICE = os.environ["AZURE_SEARCH_SERVICE"]
     AZURE_SEARCH_INDEX = os.environ["AZURE_SEARCH_INDEX"]
     # Shared by all OpenAI deployments
@@ -223,6 +224,7 @@ async def setup_clients():
 
     AZURE_SEARCH_QUERY_LANGUAGE = os.getenv("AZURE_SEARCH_QUERY_LANGUAGE", "en-us")
     AZURE_SEARCH_QUERY_SPELLER = os.getenv("AZURE_SEARCH_QUERY_SPELLER", "lexicon")
+    AZURE_SEARCH_QUERY_KEY = os.getenv("AZURE_COGNITIVE_QUERY_KEY")
 
     # Use the current user identity to authenticate with Azure OpenAI, Cognitive Search and Blob Storage (no secrets needed,
     # just use 'az login' locally, and managed identity when deployed on Azure). If you need to use keys, use separate AzureKeyCredential instances with the
@@ -246,13 +248,10 @@ async def setup_clients():
     search_client = SearchClient(
         endpoint=f"https://{AZURE_SEARCH_SERVICE}.search.windows.net",
         index_name=AZURE_SEARCH_INDEX,
-        credential=AzureKeyCredential(
-            "iZW0HWm8RMfFgorurxXT48a6Fc4BDgiiBHV1pRFD3PAzSeCFHbkb"
-        ),
+        credential=AzureKeyCredential(AZURE_SEARCH_QUERY_KEY),
     )
-    blob_client = BlobServiceClient(
-        account_url=f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net",
-        credential=azure_credential,
+    blob_client = BlobServiceClient.from_connection_string(
+        os.getenv("BLOB_SERVICE_CONNECTION_STRING")
     )
     blob_container_client = blob_client.get_container_client(AZURE_STORAGE_CONTAINER)
 
