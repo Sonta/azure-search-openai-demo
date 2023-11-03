@@ -1,14 +1,14 @@
 import json
 import logging
+import os
 import re
 from typing import Any, AsyncGenerator, Optional, Union
 
 import aiohttp
 import openai
+from approaches.approach import Approach
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import QueryType
-
-from approaches.approach import Approach
 from core.messagebuilder import MessageBuilder
 from core.modelhelper import get_token_limit
 from text import nonewlines
@@ -64,7 +64,9 @@ If you cannot generate a search query, return just the number 0.
         openai_host: str,
         chatgpt_deployment: Optional[str],  # Not needed for non-Azure OpenAI
         chatgpt_model: str,
-        embedding_deployment: Optional[str],  # Not needed for non-Azure OpenAI or for retrieval_mode="text"
+        embedding_deployment: Optional[
+            str
+        ],  # Not needed for non-Azure OpenAI or for retrieval_mode="text"
         embedding_model: str,
         sourcepage_field: str,
         content_field: str,
@@ -82,6 +84,7 @@ If you cannot generate a search query, return just the number 0.
         self.query_language = query_language
         self.query_speller = query_speller
         self.chatgpt_token_limit = get_token_limit(chatgpt_model)
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
 
     async def run_until_final_call(
         self,
@@ -92,7 +95,9 @@ If you cannot generate a search query, return just the number 0.
     ) -> tuple:
         has_text = overrides.get("retrieval_mode") in ["text", "hybrid", None]
         has_vector = overrides.get("retrieval_mode") in ["vectors", "hybrid", None]
-        use_semantic_captions = True if overrides.get("semantic_captions") and has_text else False
+        use_semantic_captions = (
+            True if overrides.get("semantic_captions") and has_text else False
+        )
         top = overrides.get("top", 3)
         filter = self.build_filter(overrides, auth_claims)
 
@@ -126,7 +131,10 @@ If you cannot generate a search query, return just the number 0.
             few_shots=self.query_prompt_few_shots,
         )
 
-        chatgpt_args = {"deployment_id": self.chatgpt_deployment} if self.openai_host == "azure" else {}
+        chatgpt_args = {
+            "deployment_id": self.chatgpt_deployment,
+            "api_key": self.openai_api_key,
+        }
         chat_completion = await openai.ChatCompletion.acreate(
             **chatgpt_args,
             model=self.chatgpt_model,
@@ -134,8 +142,8 @@ If you cannot generate a search query, return just the number 0.
             temperature=0.0,
             max_tokens=100,  # Setting too low risks malformed JSON, setting too high may affect performance
             n=1,
-            functions=functions,
-            function_call="auto",
+            # functions=functions,
+            # function_call="auto",
         )
 
         query_text = self.get_search_query(chat_completion, original_user_query)
@@ -144,8 +152,13 @@ If you cannot generate a search query, return just the number 0.
 
         # If retrieval mode includes vectors, compute an embedding for the query
         if has_vector:
-            embedding_args = {"deployment_id": self.embedding_deployment} if self.openai_host == "azure" else {}
-            embedding = await openai.Embedding.acreate(**embedding_args, model=self.embedding_model, input=query_text)
+            embedding_args = {
+                "deployment_id": self.embedding_deployment,
+                "api_key": self.openai_api_key,
+            }
+            embedding = await openai.Embedding.acreate(
+                **embedding_args, model=self.embedding_model, input=query_text
+            )
             query_vector = embedding["data"][0]["embedding"]
         else:
             query_vector = None
@@ -164,7 +177,9 @@ If you cannot generate a search query, return just the number 0.
                 query_speller=self.query_speller,
                 semantic_configuration_name="default",
                 top=top,
-                query_caption="extractive|highlight-false" if use_semantic_captions else None,
+                query_caption="extractive|highlight-false"
+                if use_semantic_captions
+                else None,
                 vector=query_vector,
                 top_k=50 if query_vector else None,
                 vector_fields="embedding" if query_vector else None,
@@ -180,15 +195,22 @@ If you cannot generate a search query, return just the number 0.
             )
         if use_semantic_captions:
             results = [
-                doc[self.sourcepage_field] + ": " + nonewlines(" . ".join([c.text for c in doc["@search.captions"]]))
+                doc[self.sourcepage_field]
+                + ": "
+                + nonewlines(" . ".join([c.text for c in doc["@search.captions"]]))
                 async for doc in r
             ]
         else:
-            results = [doc[self.sourcepage_field] + ": " + nonewlines(doc[self.content_field]) async for doc in r]
+            results = [
+                doc[self.sourcepage_field] + ": " + nonewlines(doc[self.content_field])
+                async for doc in r
+            ]
         content = "\n".join(results)
 
         follow_up_questions_prompt = (
-            self.follow_up_questions_prompt_content if overrides.get("suggest_followup_questions") else ""
+            self.follow_up_questions_prompt_content
+            if overrides.get("suggest_followup_questions")
+            else ""
         )
 
         # STEP 3: Generate a contextual and content specific answer using the search results and chat history
@@ -197,14 +219,18 @@ If you cannot generate a search query, return just the number 0.
         prompt_override = overrides.get("prompt_template")
         if prompt_override is None:
             system_message = self.system_message_chat_conversation.format(
-                injected_prompt="", follow_up_questions_prompt=follow_up_questions_prompt
+                injected_prompt="",
+                follow_up_questions_prompt=follow_up_questions_prompt,
             )
         elif prompt_override.startswith(">>>"):
             system_message = self.system_message_chat_conversation.format(
-                injected_prompt=prompt_override[3:] + "\n", follow_up_questions_prompt=follow_up_questions_prompt
+                injected_prompt=prompt_override[3:] + "\n",
+                follow_up_questions_prompt=follow_up_questions_prompt,
             )
         else:
-            system_message = prompt_override.format(follow_up_questions_prompt=follow_up_questions_prompt)
+            system_message = prompt_override.format(
+                follow_up_questions_prompt=follow_up_questions_prompt
+            )
 
         response_token_limit = 1024
         messages_token_limit = self.chatgpt_token_limit - response_token_limit
@@ -248,9 +274,13 @@ If you cannot generate a search query, return just the number 0.
         chat_resp = dict(await chat_coroutine)
         chat_resp["choices"][0]["context"] = extra_info
         if overrides.get("suggest_followup_questions"):
-            content, followup_questions = self.extract_followup_questions(chat_resp["choices"][0]["message"]["content"])
+            content, followup_questions = self.extract_followup_questions(
+                chat_resp["choices"][0]["message"]["content"]
+            )
             chat_resp["choices"][0]["message"]["content"] = content
-            chat_resp["choices"][0]["context"]["followup_questions"] = followup_questions
+            chat_resp["choices"][0]["context"][
+                "followup_questions"
+            ] = followup_questions
         chat_resp["choices"][0]["session_state"] = session_state
         return chat_resp
 
@@ -310,7 +340,11 @@ If you cannot generate a search query, return just the number 0.
             }
 
     async def run(
-        self, messages: list[dict], stream: bool = False, session_state: Any = None, context: dict[str, Any] = {}
+        self,
+        messages: list[dict],
+        stream: bool = False,
+        session_state: Any = None,
+        context: dict[str, Any] = {},
     ) -> Union[dict[str, Any], AsyncGenerator[dict[str, Any], None]]:
         overrides = context.get("overrides", {})
         auth_claims = context.get("auth_claims", {})
@@ -318,10 +352,14 @@ If you cannot generate a search query, return just the number 0.
             # Workaround for: https://github.com/openai/openai-python/issues/371
             async with aiohttp.ClientSession() as s:
                 openai.aiosession.set(s)
-                response = await self.run_without_streaming(messages, overrides, auth_claims, session_state)
+                response = await self.run_without_streaming(
+                    messages, overrides, auth_claims, session_state
+                )
             return response
         else:
-            return self.run_with_streaming(messages, overrides, auth_claims, session_state)
+            return self.run_with_streaming(
+                messages, overrides, auth_claims, session_state
+            )
 
     def get_messages_from_history(
         self,
@@ -341,15 +379,21 @@ If you cannot generate a search query, return just the number 0.
         append_index = len(few_shots) + 1
 
         message_builder.insert_message(self.USER, user_content, index=append_index)
-        total_token_count = message_builder.count_tokens_for_message(message_builder.messages[-1])
+        total_token_count = message_builder.count_tokens_for_message(
+            message_builder.messages[-1]
+        )
 
         newest_to_oldest = list(reversed(history[:-1]))
         for message in newest_to_oldest:
             potential_message_count = message_builder.count_tokens_for_message(message)
             if (total_token_count + potential_message_count) > max_tokens:
-                logging.debug("Reached max tokens of %d, history will be truncated", max_tokens)
+                logging.debug(
+                    "Reached max tokens of %d, history will be truncated", max_tokens
+                )
                 break
-            message_builder.insert_message(message["role"], message["content"], index=append_index)
+            message_builder.insert_message(
+                message["role"], message["content"], index=append_index
+            )
             total_token_count += potential_message_count
         return message_builder.messages
 

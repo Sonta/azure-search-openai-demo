@@ -9,11 +9,16 @@ from typing import AsyncGenerator
 
 import aiohttp
 import openai
+from approaches.chatreadretrieveread import ChatReadRetrieveReadApproach
+from approaches.retrievethenread import RetrieveThenReadApproach
+from azure.core.credentials import AzureKeyCredential
 from azure.core.exceptions import ResourceNotFoundError
 from azure.identity.aio import DefaultAzureCredential
 from azure.monitor.opentelemetry import configure_azure_monitor
 from azure.search.documents.aio import SearchClient
 from azure.storage.blob.aio import BlobServiceClient
+from core.authentication import AuthenticationHelper
+from dotenv import load_dotenv
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
 from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
 from quart import (
@@ -29,9 +34,7 @@ from quart import (
 )
 from quart_cors import cors
 
-from approaches.chatreadretrieveread import ChatReadRetrieveReadApproach
-from approaches.retrievethenread import RetrieveThenReadApproach
-from core.authentication import AuthenticationHelper
+load_dotenv()
 
 CONFIG_OPENAI_TOKEN = "openai_token"
 CONFIG_CREDENTIAL = "azure_credential"
@@ -67,7 +70,9 @@ async def favicon():
 
 @bp.route("/assets/<path:path>")
 async def assets(path):
-    return await send_from_directory(Path(__file__).resolve().parent / "static" / "assets", path)
+    return await send_from_directory(
+        Path(__file__).resolve().parent / "static" / "assets", path
+    )
 
 
 # Serve content files from blob storage from within the app to keep the example self-contained.
@@ -94,7 +99,9 @@ async def content_file(path: str):
     blob_file = io.BytesIO()
     await blob.readinto(blob_file)
     blob_file.seek(0)
-    return await send_file(blob_file, mimetype=mime_type, as_attachment=False, attachment_filename=path)
+    return await send_file(
+        blob_file, mimetype=mime_type, as_attachment=False, attachment_filename=path
+    )
 
 
 def error_dict(error: Exception) -> dict:
@@ -108,14 +115,18 @@ async def ask():
     request_json = await request.get_json()
     context = request_json.get("context", {})
     auth_helper = current_app.config[CONFIG_AUTH_CLIENT]
-    context["auth_claims"] = await auth_helper.get_auth_claims_if_enabled(request.headers)
+    context["auth_claims"] = await auth_helper.get_auth_claims_if_enabled(
+        request.headers
+    )
     try:
         approach = current_app.config[CONFIG_ASK_APPROACH]
         # Workaround for: https://github.com/openai/openai-python/issues/371
         async with aiohttp.ClientSession() as s:
             openai.aiosession.set(s)
             r = await approach.run(
-                request_json["messages"], context=context, session_state=request_json.get("session_state")
+                request_json["messages"],
+                context=context,
+                session_state=request_json.get("session_state"),
             )
         return jsonify(r)
     except Exception as error:
@@ -139,7 +150,9 @@ async def chat():
     request_json = await request.get_json()
     context = request_json.get("context", {})
     auth_helper = current_app.config[CONFIG_AUTH_CLIENT]
-    context["auth_claims"] = await auth_helper.get_auth_claims_if_enabled(request.headers)
+    context["auth_claims"] = await auth_helper.get_auth_claims_if_enabled(
+        request.headers
+    )
     try:
         approach = current_app.config[CONFIG_CHAT_APPROACH]
         result = await approach.run(
@@ -189,15 +202,16 @@ async def setup_clients():
     # Shared by all OpenAI deployments
     OPENAI_HOST = os.getenv("OPENAI_HOST", "azure")
     OPENAI_CHATGPT_MODEL = os.environ["AZURE_OPENAI_CHATGPT_MODEL"]
-    OPENAI_EMB_MODEL = os.getenv("AZURE_OPENAI_EMB_MODEL_NAME", "text-embedding-ada-002")
+    OPENAI_EMB_MODEL = os.getenv(
+        "AZURE_OPENAI_EMB_MODEL_NAME", "text-embedding-ada-002"
+    )
     # Used with Azure OpenAI deployments
     AZURE_OPENAI_SERVICE = os.getenv("AZURE_OPENAI_SERVICE")
     AZURE_OPENAI_CHATGPT_DEPLOYMENT = os.getenv("AZURE_OPENAI_CHATGPT_DEPLOYMENT")
     AZURE_OPENAI_EMB_DEPLOYMENT = os.getenv("AZURE_OPENAI_EMB_DEPLOYMENT")
-    # Used only with non-Azure OpenAI deployments
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    OPENAI_ORGANIZATION = os.getenv("OPENAI_ORGANIZATION")
-    AZURE_USE_AUTHENTICATION = os.getenv("AZURE_USE_AUTHENTICATION", "").lower() == "true"
+    AZURE_USE_AUTHENTICATION = (
+        os.getenv("AZURE_USE_AUTHENTICATION", "").lower() == "true"
+    )
     AZURE_SERVER_APP_ID = os.getenv("AZURE_SERVER_APP_ID")
     AZURE_SERVER_APP_SECRET = os.getenv("AZURE_SERVER_APP_SECRET")
     AZURE_CLIENT_APP_ID = os.getenv("AZURE_CLIENT_APP_ID")
@@ -214,7 +228,9 @@ async def setup_clients():
     # just use 'az login' locally, and managed identity when deployed on Azure). If you need to use keys, use separate AzureKeyCredential instances with the
     # keys for each service
     # If you encounter a blocking error during a DefaultAzureCredential resolution, you can exclude the problematic credential by using a parameter (ex. exclude_shared_token_cache_credential=True)
-    azure_credential = DefaultAzureCredential(exclude_shared_token_cache_credential=True)
+    azure_credential = DefaultAzureCredential(
+        exclude_shared_token_cache_credential=True
+    )
 
     # Set up authentication helper
     auth_helper = AuthenticationHelper(
@@ -230,26 +246,26 @@ async def setup_clients():
     search_client = SearchClient(
         endpoint=f"https://{AZURE_SEARCH_SERVICE}.search.windows.net",
         index_name=AZURE_SEARCH_INDEX,
-        credential=azure_credential,
+        credential=AzureKeyCredential(
+            "iZW0HWm8RMfFgorurxXT48a6Fc4BDgiiBHV1pRFD3PAzSeCFHbkb"
+        ),
     )
     blob_client = BlobServiceClient(
-        account_url=f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net", credential=azure_credential
+        account_url=f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net",
+        credential=azure_credential,
     )
     blob_container_client = blob_client.get_container_client(AZURE_STORAGE_CONTAINER)
 
     # Used by the OpenAI SDK
-    if OPENAI_HOST == "azure":
-        openai.api_type = "azure_ad"
-        openai.api_base = f"https://{AZURE_OPENAI_SERVICE}.openai.azure.com"
-        openai.api_version = "2023-07-01-preview"
-        openai_token = await azure_credential.get_token("https://cognitiveservices.azure.com/.default")
-        openai.api_key = openai_token.token
-        # Store on app.config for later use inside requests
-        current_app.config[CONFIG_OPENAI_TOKEN] = openai_token
-    else:
-        openai.api_type = "openai"
-        openai.api_key = OPENAI_API_KEY
-        openai.organization = OPENAI_ORGANIZATION
+    openai.api_type = os.getenv("OPENAI_API_TYPE")
+    openai.api_base = f"https://{AZURE_OPENAI_SERVICE}.openai.azure.com"
+    openai.api_version = os.getenv("OPENAI_API_VERSION")
+    openai_token = await azure_credential.get_token(
+        "https://cognitiveservices.azure.com/.default"
+    )
+    openai.api_key = openai_token.token
+    # Store on app.config for later use inside requests
+    current_app.config[CONFIG_OPENAI_TOKEN] = openai_token
 
     current_app.config[CONFIG_CREDENTIAL] = azure_credential
     current_app.config[CONFIG_SEARCH_CLIENT] = search_client
@@ -259,29 +275,29 @@ async def setup_clients():
     # Various approaches to integrate GPT and external knowledge, most applications will use a single one of these patterns
     # or some derivative, here we include several for exploration purposes
     current_app.config[CONFIG_ASK_APPROACH] = RetrieveThenReadApproach(
-        search_client,
-        OPENAI_HOST,
-        AZURE_OPENAI_CHATGPT_DEPLOYMENT,
-        OPENAI_CHATGPT_MODEL,
-        AZURE_OPENAI_EMB_DEPLOYMENT,
-        OPENAI_EMB_MODEL,
-        KB_FIELDS_SOURCEPAGE,
-        KB_FIELDS_CONTENT,
-        AZURE_SEARCH_QUERY_LANGUAGE,
-        AZURE_SEARCH_QUERY_SPELLER,
+        search_client=search_client,
+        openai_host=OPENAI_HOST,
+        chatgpt_deployment=AZURE_OPENAI_CHATGPT_DEPLOYMENT,
+        chatgpt_model=OPENAI_CHATGPT_MODEL,
+        embedding_deployment=AZURE_OPENAI_EMB_DEPLOYMENT,
+        embedding_model=OPENAI_EMB_MODEL,
+        sourcepage_field=KB_FIELDS_SOURCEPAGE,
+        content_field=KB_FIELDS_CONTENT,
+        query_language=AZURE_SEARCH_QUERY_LANGUAGE,
+        query_speller=AZURE_SEARCH_QUERY_SPELLER,
     )
 
     current_app.config[CONFIG_CHAT_APPROACH] = ChatReadRetrieveReadApproach(
-        search_client,
-        OPENAI_HOST,
-        AZURE_OPENAI_CHATGPT_DEPLOYMENT,
-        OPENAI_CHATGPT_MODEL,
-        AZURE_OPENAI_EMB_DEPLOYMENT,
-        OPENAI_EMB_MODEL,
-        KB_FIELDS_SOURCEPAGE,
-        KB_FIELDS_CONTENT,
-        AZURE_SEARCH_QUERY_LANGUAGE,
-        AZURE_SEARCH_QUERY_SPELLER,
+        search_client=search_client,
+        openai_host=OPENAI_HOST,
+        chatgpt_deployment=AZURE_OPENAI_CHATGPT_DEPLOYMENT,
+        chatgpt_model=OPENAI_CHATGPT_MODEL,
+        embedding_deployment=AZURE_OPENAI_EMB_DEPLOYMENT,
+        embedding_model=OPENAI_EMB_MODEL,
+        sourcepage_field=KB_FIELDS_SOURCEPAGE,
+        content_field=KB_FIELDS_CONTENT,
+        query_language=AZURE_SEARCH_QUERY_LANGUAGE,
+        query_speller=AZURE_SEARCH_QUERY_SPELLER,
     )
 
 
