@@ -206,6 +206,23 @@ tests = ["attrs[tests-no-zope]", "zope-interface"]
 tests-no-zope = ["cloudpickle", "hypothesis", "mypy (>=1.1.1)", "pympler", "pytest (>=4.3.0)", "pytest-mypy-plugins", "pytest-xdist[psutil]"]
 
 [[package]]
+name = "azure-ai-formrecognizer"
+version = "3.3.1"
+description = "Microsoft Azure Form Recognizer Client Library for Python"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "azure-ai-formrecognizer-3.3.1.tar.gz", hash = "sha256:bd5f764cc438529589a4e7d2955a22a0883c7cdce291cf14a53a0d9079c3427b"},
+    {file = "azure_ai_formrecognizer-3.3.1-py3-none-any.whl", hash = "sha256:761612eb454eb866dc143281ad7ba3169e56f43f8f246b72c8429edd181e5e77"},
+]
+
+[package.dependencies]
+azure-common = ">=1.1,<2.0"
+azure-core = ">=1.23.0,<2.0.0"
+msrest = ">=0.6.21"
+typing-extensions = ">=4.0.1"
+
+[[package]]
 name = "azure-common"
 version = "1.1.28"
 description = "Microsoft Azure Client Library for Python (Common)"
@@ -339,6 +356,26 @@ files = [
 [package.dependencies]
 azure-core = ">=1.28.0,<2.0.0"
 cryptography = ">=2.1.4"
+isodate = ">=0.6.1"
+typing-extensions = ">=4.3.0"
+
+[package.extras]
+aio = ["azure-core[aio] (>=1.28.0,<2.0.0)"]
+
+[[package]]
+name = "azure-storage-file-datalake"
+version = "12.13.2"
+description = "Microsoft Azure File DataLake Storage Client Library for Python"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "azure-storage-file-datalake-12.13.2.tar.gz", hash = "sha256:7b199828b1abe170d64d68d67e0b74200a9a445a2261c1a96fdd06f584d34f36"},
+    {file = "azure_storage_file_datalake-12.13.2-py3-none-any.whl", hash = "sha256:04c043bac0a996184eac043c42aecde880f9cebf2811af158f33e384458e8037"},
+]
+
+[package.dependencies]
+azure-core = ">=1.28.0,<2.0.0"
+azure-storage-blob = ">=12.18.3,<13.0.0"
 isodate = ">=0.6.1"
 typing-extensions = ">=4.3.0"
 
@@ -2153,6 +2190,20 @@ pure-eval = "*"
 tests = ["cython", "littleutils", "pygments", "pytest", "typeguard"]
 
 [[package]]
+name = "tenacity"
+version = "8.2.3"
+description = "Retry code until it succeeds"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "tenacity-8.2.3-py3-none-any.whl", hash = "sha256:ce510e327a630c9e1beaf17d42e6ffacc88185044ad85cf74c0a8887c6a0f88c"},
+    {file = "tenacity-8.2.3.tar.gz", hash = "sha256:5398ef0d78e63f40007c1fb4c0bff96e1911394d2fa8d194f77619c05ff6cc8a"},
+]
+
+[package.extras]
+doc = ["reno", "sphinx", "tornado (>=4.5)"]
+
+[[package]]
 name = "tiktoken"
 version = "0.5.1"
 description = "tiktoken is a fast BPE tokeniser for use with OpenAI's models"
@@ -2531,4 +2582,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "73556182be3ce41d036679bcbcd4420a92d263c3c1070088bcc988728b096a92"
+content-hash = "0e09b63d484dd3cc6bbabd1872ffccdba875dcc2ab0302efe8e783db47de116e"
