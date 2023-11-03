@@ -5,7 +5,6 @@ from typing import Any, Optional, Union
 from azure.core.credentials import AzureKeyCredential
 from azure.core.credentials_async import AsyncTokenCredential
 from azure.identity.aio import AzureDeveloperCliCredential
-
 from prepdocslib.blobmanager import BlobManager
 from prepdocslib.embeddings import (
     AzureOpenAIEmbeddingService,
@@ -18,7 +17,7 @@ from prepdocslib.listfilestrategy import (
     ListFileStrategy,
     LocalListFileStrategy,
 )
-from prepdocslib.pdfparser import DocumentAnalysisPdfParser, LocalPdfParser, PdfParser
+from prepdocslib.pdfparser import DocumentAnalysisPdfParser, PdfParser
 from prepdocslib.strategy import SearchInfo, Strategy
 from prepdocslib.textsplitter import TextSplitter
 
@@ -37,29 +36,30 @@ def setup_file_strategy(credential: AsyncTokenCredential, args: Any) -> FileStra
     )
 
     pdf_parser: PdfParser
-    if args.localpdfparser:
-        pdf_parser = LocalPdfParser()
-    else:
-        # check if Azure Form Recognizer credentials are provided
-        if args.formrecognizerservice is None:
-            print(
-                "Error: Azure Form Recognizer service is not provided. Please provide formrecognizerservice or use --localpdfparser for local pypdf parser."
-            )
-            exit(1)
-        formrecognizer_creds: Union[AsyncTokenCredential, AzureKeyCredential] = (
-            credential if is_key_empty(args.formrecognizerkey) else AzureKeyCredential(args.formrecognizerkey)
+    # check if Azure Form Recognizer credentials are provided
+    if args.formrecognizerservice is None:
+        print(
+            "Error: Azure Form Recognizer service is not provided. Please provide formrecognizerservice"
         )
-        pdf_parser = DocumentAnalysisPdfParser(
-            endpoint=f"https://{args.formrecognizerservice}.cognitiveservices.azure.com/",
-            credential=formrecognizer_creds,
-            verbose=args.verbose,
-        )
+        exit(1)
+    formrecognizer_creds: Union[AsyncTokenCredential, AzureKeyCredential] = (
+        credential
+        if is_key_empty(args.formrecognizerkey)
+        else AzureKeyCredential(args.formrecognizerkey)
+    )
+    pdf_parser = DocumentAnalysisPdfParser(
+        endpoint=f"https://{args.formrecognizerservice}.cognitiveservices.azure.com/",
+        credential=formrecognizer_creds,
+        verbose=args.verbose,
+    )
 
     use_vectors = not args.novectors
     embeddings: Optional[OpenAIEmbeddings] = None
     if use_vectors and args.openaihost != "openai":
         azure_open_ai_credential: Union[AsyncTokenCredential, AzureKeyCredential] = (
-            credential if is_key_empty(args.openaikey) else AzureKeyCredential(args.openaikey)
+            credential
+            if is_key_empty(args.openaikey)
+            else AzureKeyCredential(args.openaikey)
         )
         embeddings = AzureOpenAIEmbeddingService(
             open_ai_service=args.openaiservice,
@@ -81,7 +81,9 @@ def setup_file_strategy(credential: AsyncTokenCredential, args: Any) -> FileStra
     print("Processing files...")
     list_file_strategy: ListFileStrategy
     if args.datalakestorageaccount:
-        adls_gen2_creds = credential if is_key_empty(args.datalakekey) else args.datalakekey
+        adls_gen2_creds = (
+            credential if is_key_empty(args.datalakekey) else args.datalakekey
+        )
         print(f"Using Data Lake Gen2 Storage Account {args.datalakestorageaccount}")
         list_file_strategy = ADLSGen2ListFileStrategy(
             data_lake_storage_account=args.datalakestorageaccount,
@@ -92,7 +94,9 @@ def setup_file_strategy(credential: AsyncTokenCredential, args: Any) -> FileStra
         )
     else:
         print(f"Using local files in {args.files}")
-        list_file_strategy = LocalListFileStrategy(path_pattern=args.files, verbose=args.verbose)
+        list_file_strategy = LocalListFileStrategy(
+            path_pattern=args.files, verbose=args.verbose
+        )
 
     if args.removeall:
         document_action = DocumentAction.RemoveAll
@@ -116,7 +120,9 @@ def setup_file_strategy(credential: AsyncTokenCredential, args: Any) -> FileStra
 
 async def main(strategy: Strategy, credential: AsyncTokenCredential, args: Any):
     search_creds: Union[AsyncTokenCredential, AzureKeyCredential] = (
-        credential if is_key_empty(args.searchkey) else AzureKeyCredential(args.searchkey)
+        credential
+        if is_key_empty(args.searchkey)
+        else AzureKeyCredential(args.searchkey)
     )
     search_info = SearchInfo(
         endpoint=f"https://{args.searchservice}.search.windows.net/",
@@ -138,7 +144,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("files", nargs="?", help="Files to be processed")
     parser.add_argument(
-        "--datalakestorageaccount", required=False, help="Optional. Azure Data Lake Storage Gen2 Account name"
+        "--datalakestorageaccount",
+        required=False,
+        help="Optional. Azure Data Lake Storage Gen2 Account name",
     )
     parser.add_argument(
         "--datalakefilesystem",
@@ -152,16 +160,23 @@ if __name__ == "__main__":
         help="Optional. Azure Data Lake Storage Gen2 filesystem path containing files to index. If omitted, index the entire filesystem",
     )
     parser.add_argument(
-        "--datalakekey", required=False, help="Optional. Use this key when authenticating to Azure Data Lake Gen2"
+        "--datalakekey",
+        required=False,
+        help="Optional. Use this key when authenticating to Azure Data Lake Gen2",
     )
     parser.add_argument(
-        "--useacls", action="store_true", help="Store ACLs from Azure Data Lake Gen2 Filesystem in the search index"
+        "--useacls",
+        action="store_true",
+        help="Store ACLs from Azure Data Lake Gen2 Filesystem in the search index",
     )
     parser.add_argument(
-        "--category", help="Value for the category field in the search index for all sections indexed in this run"
+        "--category",
+        help="Value for the category field in the search index for all sections indexed in this run",
     )
     parser.add_argument(
-        "--skipblobs", action="store_true", help="Skip uploading individual pages to Azure Blob Storage"
+        "--skipblobs",
+        action="store_true",
+        help="Skip uploading individual pages to Azure Blob Storage",
     )
     parser.add_argument("--storageaccount", help="Azure Blob Storage account name")
     parser.add_argument("--container", help="Azure Blob Storage container name")
@@ -171,7 +186,9 @@ if __name__ == "__main__":
         help="Optional. Use this Azure Blob Storage account key instead of the current user identity to login (use az login to set current user for Azure)",
     )
     parser.add_argument(
-        "--tenantid", required=False, help="Optional. Use this to define the Azure directory where to authenticate)"
+        "--tenantid",
+        required=False,
+        help="Optional. Use this to define the Azure directory where to authenticate)",
     )
     parser.add_argument(
         "--searchservice",
@@ -192,14 +209,21 @@ if __name__ == "__main__":
         default="en.microsoft",
         help="Optional. Name of the Azure Cognitive Search analyzer to use for the content field in the index",
     )
-    parser.add_argument("--openaihost", help="Host of the API used to compute embeddings ('azure' or 'openai')")
-    parser.add_argument("--openaiservice", help="Name of the Azure OpenAI service used to compute embeddings")
+    parser.add_argument(
+        "--openaihost",
+        help="Host of the API used to compute embeddings ('azure' or 'openai')",
+    )
+    parser.add_argument(
+        "--openaiservice",
+        help="Name of the Azure OpenAI service used to compute embeddings",
+    )
     parser.add_argument(
         "--openaideployment",
         help="Name of the Azure OpenAI model deployment for an embedding model ('text-embedding-ada-002' recommended)",
     )
     parser.add_argument(
-        "--openaimodelname", help="Name of the Azure OpenAI embedding model ('text-embedding-ada-002' recommended)"
+        "--openaimodelname",
+        help="Name of the Azure OpenAI embedding model ('text-embedding-ada-002' recommended)",
     )
     parser.add_argument(
         "--novectors",
@@ -207,14 +231,20 @@ if __name__ == "__main__":
         help="Don't compute embeddings for the sections (e.g. don't call the OpenAI embeddings API during indexing)",
     )
     parser.add_argument(
-        "--disablebatchvectors", action="store_true", help="Don't compute embeddings in batch for the sections"
+        "--disablebatchvectors",
+        action="store_true",
+        help="Don't compute embeddings in batch for the sections",
     )
     parser.add_argument(
         "--openaikey",
         required=False,
         help="Optional. Use this Azure OpenAI account key instead of the current user identity to login (use az login to set current user for Azure). This is required only when using non-Azure endpoints.",
     )
-    parser.add_argument("--openaiorg", required=False, help="This is required only when using non-Azure endpoints.")
+    parser.add_argument(
+        "--openaiorg",
+        required=False,
+        help="This is required only when using non-Azure endpoints.",
+    )
     parser.add_argument(
         "--remove",
         action="store_true",
@@ -224,11 +254,6 @@ if __name__ == "__main__":
         "--removeall",
         action="store_true",
         help="Remove all blobs from blob storage and documents from the search index",
-    )
-    parser.add_argument(
-        "--localpdfparser",
-        action="store_true",
-        help="Use PyPdf local PDF parser (supports only digital PDFs) instead of Azure Form Recognizer service to extract text, tables and layout from the documents",
     )
     parser.add_argument(
         "--formrecognizerservice",
